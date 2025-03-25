@@ -1,0 +1,26 @@
+YouTube Transcript Download Summary Report
+==================================================
+Date: 2025-03-25 07:31:13
+Total videos processed: 0
+Successful downloads: 0 (0.0%)
+Failed downloads: 0 (100.0%)
+
+Success Breakdown:
+--------------------
+
+Failure Breakdown:
+--------------------
+
+System Capabilities:
+--------------------
+FFmpeg Available: True
+Whisper Available: False
+
+YouTube API Quota Information:
+------------------------------
+The YouTube Data API v3 has a daily quota limit of 10,000 units.
+Each search.list request costs 100 units.
+Each videos.list request costs 1 unit.
+Using the youtube-transcript-api does not count against this quota.
+
+For more details, see: https://developers.google.com/youtube/v3/getting-started#quota

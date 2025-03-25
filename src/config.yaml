@@ -1,26 +1,25 @@
 # YouTube Transcript Scraper Configuration
-
 # Input Files
 YT_CHANNEL_CSV: "yt_channels.csv"
 YT_VIDEO_CSV: "yt_videos.csv"
-
 # Output Paths
 OUTPUT_YT_VIDEO_CSV: "output_yt_videos.csv"
-
 # Video Filtering Parameters
-MIN_LEN_MINS: 20
-MAX_LEN_MINS: 240
+MIN_LEN_MINS: 0 # Setting to 0 to accept any length videos for testing
+MAX_LEN_MINS: 300 # Increased to allow most videos
 LANG_INCL_LS: ['en']
 FILTER_EXCLUDE_TITLE: ['going deeper', 'sunday school']
-DATE_START: ""  # Format: YYYY-MM-DD
-DATE_END: ""    # Format: YYYY-MM-DD
-
+DATE_START: "" # Format: YYYY-MM-DD
+DATE_END: "" # Format: YYYY-MM-DD
 # Method Order - try methods in this order
 # Options: 'api', 'yt-dlp', 'audio'
-METHOD_ORDER_LS: ['api', 'yt-dlp', 'audio']
-
+METHOD_ORDER_LS: ['audio'] # ['api', 'yt-dlp', 'audio']
+# Speech-to-Text Processing
+PROCESS_SST_AUDIO: true # If true, convert downloaded audio to transcripts
 # Rate Limiting and Anti-Blocking
-MIN_WAIT_TIME: 0.5  # Minimum wait time in seconds
-
+MIN_WAIT_TIME: 0.5 # Minimum wait time in seconds
+# Channel Processing Limits
+MAX_PAGES_PER_CHANNEL: 5 # Maximum number of result pages to process per channel
+MAX_VIDEOS_PER_CHANNEL: 10 # Maximum number of videos to process per channel
 # Logging Configuration
-LOGGING_LEVEL: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOGGING_LEVEL: "INFO" # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL

@@ -154,9 +154,6 @@ def get_video_details(youtube, config: Dict[str, Any], video_id: str) -> Optiona
     """Get detailed video information including duration"""
     power_law_pause(config["MIN_WAIT_TIME"])
     
-    # Update headers with new user agent
-    youtube.videos().list.__func__.__globals__['service']._http.request_builder.headers["User-Agent"] = get_user_agent()
-    
     request = youtube.videos().list(
         part="contentDetails,snippet",
         id=video_id
@@ -215,9 +212,6 @@ def get_all_videos(youtube, config: Dict[str, Any], channel_id: str) -> List[Dic
     while True:
         power_law_pause(config["MIN_WAIT_TIME"])
         
-        # Update headers with new user agent for each request
-        youtube.videos().list.__func__.__globals__['service']._http.request_builder.headers["User-Agent"] = get_user_agent()
-        
         request = youtube.search().list(
             part="snippet",
             channelId=channel_id,
@@ -256,14 +250,42 @@ def get_transcript_via_api(config: Dict[str, Any], video_id: str) -> Tuple[Optio
         try:
             transcript = transcript_list.find_manually_created_transcript(config["LANG_INCL_LS"])
             logging.debug(f"Found manually created transcript for {video_id}")
-            return transcript.fetch(), "manual_api"
-        except:
+            
+            # Explicitly create a list of dictionaries with only the required fields
+            raw_transcript = transcript.fetch()
+            transcript_data = []
+            
+            for item in raw_transcript:
+                # Convert each transcript item to a simple dictionary with primitive types
+                transcript_data.append({
+                    "text": str(item.get("text", "")),
+                    "start": float(item.get("start", 0)),
+                    "duration": float(item.get("duration", 0))
+                })
+            
+            return transcript_data, "manual_api"
+        except Exception as e:
+            logging.debug(f"Error getting manual transcript: {str(e)}")
             # Fall back to generated transcript
             try:
                 transcript = transcript_list.find_generated_transcript(config["LANG_INCL_LS"])
                 logging.debug(f"Found auto-generated transcript for {video_id}")
-                return transcript.fetch(), "generated_api"
-            except:
+                
+                # Explicitly create a list of dictionaries with only the required fields
+                raw_transcript = transcript.fetch()
+                transcript_data = []
+                
+                for item in raw_transcript:
+                    # Convert each transcript item to a simple dictionary with primitive types
+                    transcript_data.append({
+                        "text": str(item.get("text", "")),
+                        "start": float(item.get("start", 0)),
+                        "duration": float(item.get("duration", 0))
+                    })
+                
+                return transcript_data, "generated_api"
+            except Exception as e:
+                logging.debug(f"Error getting generated transcript: {str(e)}")
                 logging.debug(f"No transcript found in specified languages for {video_id}")
                 return None, "not_found_api"
     
@@ -281,7 +303,7 @@ def get_transcript_via_ytdlp(config: Dict[str, Any], video_id: str) -> Tuple[Opt
     # Set up temporary file for download
     temp_dir = Path(__file__).parent.parent / "temp"
     temp_dir.mkdir(exist_ok=True)
-    temp_file = temp_dir / f"{video_id}.json"
+    temp_file = temp_dir / f"{video_id}"
     
     ydl_opts = {
         'skip_download': True,
@@ -559,7 +581,8 @@ def generate_summary_report(success_data: Dict, fail_data: Dict, paths: Dict[str
     ]
     
     for method, count in success_methods.items():
-        report.append(f"  {method}: {count} ({count/len(success_data)*100:.1f}% of successes)")
+        percentage = count/len(success_data)*100 if len(success_data) > 0 else 0
+        report.append(f"  {method}: {count} ({percentage:.1f}% of successes)")
     
     report.extend([
         "",
@@ -568,7 +591,8 @@ def generate_summary_report(success_data: Dict, fail_data: Dict, paths: Dict[str
     ])
     
     for reason, count in failure_reasons.items():
-        report.append(f"  {reason}: {count} ({count/len(fail_data)*100:.1f}% of failures)")
+        percentage = count/len(fail_data)*100 if len(fail_data) > 0 else 0
+        report.append(f"  {reason}: {count} ({percentage:.1f}% of failures)")
     
     report.extend([
         "",

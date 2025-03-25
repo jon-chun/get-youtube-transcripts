@@ -1,0 +1,29 @@
+# YouTube Transcript Scraper Configuration
+
+# Input Files
+YT_CHANNEL_CSV: "yt_channels.csv"
+YT_VIDEO_CSV: "yt_videos.csv"
+
+# Output Paths
+OUTPUT_YT_VIDEO_CSV: "output_yt_videos.csv"
+
+# Video Filtering Parameters
+MIN_LEN_MINS: 0  # Setting to 0 to accept any length videos for testing
+MAX_LEN_MINS: 300  # Increased to allow most videos
+LANG_INCL_LS: ['en']
+FILTER_EXCLUDE_TITLE: ['going deeper', 'sunday school']
+DATE_START: ""  # Format: YYYY-MM-DD
+DATE_END: ""    # Format: YYYY-MM-DD
+
+# Method Order - try methods in this order
+# Options: 'api', 'yt-dlp', 'audio'
+METHOD_ORDER_LS: ['audio'] # ['api', 'yt-dlp', 'audio']
+
+# Speech-to-Text Processing
+PROCESS_SST_AUDIO: false  # If true, convert downloaded audio to transcripts
+
+# Rate Limiting and Anti-Blocking
+MIN_WAIT_TIME: 0.5  # Minimum wait time in seconds
+
+# Logging Configuration
+LOGGING_LEVEL: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
