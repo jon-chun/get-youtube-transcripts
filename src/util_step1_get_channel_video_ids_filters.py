@@ -1,32 +1,3 @@
-"""
-Explanation
-
-    Restartable Checkpoints:
-
-        At startup, the script attempts to load existing JSON checkpoint files (for all videos, accepted videos, and rejected videos).
-
-        For each channel, already processed video IDs are skipped so that the script resumes where it left off.
-
-    Frequent Checkpointing:
-
-        Every 5 videos (configurable via CHECKPOINT_VIDEO_CT), the current state is saved to disk so that progress is not lost in case of a crash.
-
-    Output Files and Directory:
-
-        All outputs (three JSON files and a human‐readable report) are saved in a directory at ../data/videos_metadata (relative to the parent directory of the script).
-
-    Server-Friendly Requests:
-
-        A delay (default 1 second, configurable via --sleep) is added between video requests to reduce the load on the server and help avoid IP blocking.
-
-    Progress Feedback:
-
-        The script uses tqdm to display a progress bar per channel and prints out the video ID, title, and duration as each video is processed.
-
-This solution should meet the requirements for a restartable, checkpointing, and server-friendly long-running application.
-
-"""
-
 import yt_dlp
 import json
 import os
@@ -339,6 +310,7 @@ def get_yt_channel_videos(channels, out_dir):
 # --- Main Function ---
 
 def main():
+    global SLEEP_DELAY  # Declare global at the top of the function.
     parser = argparse.ArgumentParser(
         description="Fetch YouTube channel video metadata, filter by criteria, and save restartable checkpoints."
     )
@@ -365,7 +337,6 @@ def main():
         logging.basicConfig(level=logging.CRITICAL, format='%(levelname)s: %(message)s')
 
     # Update sleep delay if provided.
-    global SLEEP_DELAY
     SLEEP_DELAY = args.sleep
 
     channels = args.channels if args.channels else YT_CHANNEL_LS
