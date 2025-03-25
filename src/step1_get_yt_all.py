@@ -418,44 +418,96 @@ def get_transcript_via_ytdlp(config: Dict[str, Any], video_id: str) -> Tuple[Opt
             logging.warning(f"Failed to extract transcript via yt-dlp for {video_id}: {str(e)}")
             return None, f"error_ytdlp: {str(e)}"
 
+
+
+
+
+
+
+
+
+
+
+
+
+# Then modify the download_audio function to use these settings:
+
+def check_ffmpeg_gpu_encoder() -> Optional[str]:
+    """Check which GPU encoders are available in FFmpeg"""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-encoders"], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False
+        )
+        output = result.stdout.lower()
+        
+        # Check for GPU encoders in preferred order
+        if "nvenc" in output:
+            return "nvenc"
+        elif "qsv" in output:
+            return "qsv"
+        elif "amf" in output:
+            return "amf"
+        else:
+            return None
+    except Exception as e:
+        logging.error(f"Error checking FFmpeg GPU support: {str(e)}")
+        return None
+
 def download_audio(config: Dict[str, Any], video_id: str, output_path: Path) -> Tuple[bool, str]:
-    """Download audio only at lower bitrate for whisper processing"""
+    """Download audio with GPU acceleration when available"""
     logging.info(f"Downloading audio for video {video_id}")
     
-    # Check if FFmpeg is installed for audio processing
+    # Check for FFmpeg and GPU encoder availability
     ffmpeg_available = check_ffmpeg_installed()
+    gpu_encoder = check_ffmpeg_gpu_encoder() if ffmpeg_available else None
+    
+    if gpu_encoder:
+        logging.info(f"Using FFmpeg with {gpu_encoder.upper()} hardware acceleration")
     
     # Base options for download
     ydl_opts = {
-        'outtmpl': str(output_path.with_suffix('')),  # Remove suffix as yt-dlp adds it
-        'quiet': False,  # Set to False for more verbose output for debugging
-        'no_warnings': False,  # Set to False to see warnings
+        'outtmpl': str(output_path.with_suffix('')),
+        'quiet': False,
+        'no_warnings': False,
         'user_agent': get_user_agent(),
-        'verbose': True,  # Add verbose output
+        'verbose': True,
     }
     
     if ffmpeg_available:
-        # If FFmpeg is available, use it for better audio processing
+        # Define FFmpeg arguments based on available hardware
+        ffmpeg_args = []
+        
+        # For audio normalization
+        ffmpeg_args.extend(['-af', 'loudnorm=I=-16:LRA=11:TP=-1.5'])
+        
+        # Add hardware acceleration if available
+        if gpu_encoder == "nvenc":
+            # Use higher throughput for NVIDIA GPUs
+            ffmpeg_args.extend(['-threads', '8'])
+        elif gpu_encoder == "qsv":
+            # Intel Quick Sync specific options
+            ffmpeg_args.extend(['-hwaccel', 'qsv'])
+        
         ydl_opts.update({
-            'format': 'bestaudio',  # Simplified to ensure we get the best audio
+            'format': 'bestaudio',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
-                'preferredquality': '128',  # Increased quality to 128kbps
+                'preferredquality': config.get("AUDIO_QUALITY", "128"),
             }],
-            # Add extra FFmpeg options for better audio extraction
-            'postprocessor_args': [
-                '-af', 'loudnorm=I=-16:LRA=11:TP=-1.5',  # Normalize audio
-            ],
+            'postprocessor_args': ffmpeg_args,
         })
-        logging.debug("Using FFmpeg for audio processing with normalized audio")
     else:
         # If FFmpeg is not available, download audio without processing
         ydl_opts.update({
-            'format': 'bestaudio/best',  # Just get the best available audio
+            'format': 'bestaudio/best',
         })
         logging.warning("FFmpeg not available. Downloading audio without additional processing.")
-    
+     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=True)
@@ -482,56 +534,88 @@ def download_audio(config: Dict[str, Any], video_id: str, output_path: Path) -> 
                 logging.error(f"Downloaded file not found at {final_path}")
                 return False, "file_not_found"
             
-            # Verify file size is reasonable (more than 10KB)
-            if final_path.stat().st_size < 10240:
-                logging.warning(f"Downloaded audio file is suspiciously small: {final_path.stat().st_size} bytes")
+            # Check if we need to split long audio files
+            if config.get("SPLIT_LONG_AUDIO", False) and ffmpeg_available:
+                duration_secs = get_audio_duration(final_path)
+                max_length_mins = config.get("MAX_AUDIO_LENGTH_MINS", 30)
+                chunk_mins = config.get("AUDIO_CHUNK_MINS", 10)
                 
-                # Try direct ffmpeg conversion as a fallback if the file exists but might be corrupted
-                if ffmpeg_available:
-                    try:
-                        # Get direct m4a or webm audio and convert
-                        logging.info("Trying alternate download method due to small file size")
-                        alt_ydl_opts = {
-                            'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio',
-                            'outtmpl': str(output_path.with_suffix('.%(ext)s')),
-                            'quiet': False,
-                            'no_warnings': False,
-                        }
-                        
-                        with yt_dlp.YoutubeDL(alt_ydl_opts) as alt_ydl:
-                            alt_info = alt_ydl.extract_info(f'https://www.youtube.com/watch?v={video_id}', download=True)
-                            
-                            if 'ext' in alt_info:
-                                downloaded_file = output_path.with_suffix(f'.{alt_info["ext"]}')
-                                if downloaded_file.exists() and downloaded_file.stat().st_size > 10240:
-                                    # Manual conversion to mp3
-                                    mp3_file = output_path.with_suffix('.mp3')
-                                    cmd = [
-                                        'ffmpeg', '-y', '-i', str(downloaded_file),
-                                        '-af', 'loudnorm=I=-16:LRA=11:TP=-1.5',
-                                        '-codec:a', 'libmp3lame', '-q:a', '4',
-                                        str(mp3_file)
-                                    ]
-                                    subprocess.run(cmd, check=True)
-                                    
-                                    if mp3_file.exists() and mp3_file.stat().st_size > 10240:
-                                        logging.info(f"Successfully created MP3 using alternate method")
-                                        return True, "audio_downloaded_alternate"
-                    except Exception as alt_e:
-                        logging.error(f"Alternate download method failed: {str(alt_e)}")
+                if duration_secs > max_length_mins * 60:
+                    logging.info(f"Audio file exceeds maximum length. Splitting into {chunk_mins} minute chunks")
+                    split_audio_file(final_path, chunk_mins * 60)
+                    return True, "audio_downloaded_and_split"
             
-            # If we have a non-MP3 file but needed MP3, log a warning
-            if not ffmpeg_available and final_path.suffix != '.mp3':
-                logging.warning(f"Downloaded audio is in {final_path.suffix} format. MP3 conversion requires FFmpeg.")
-            
+            # If file is valid, return success
             logging.debug(f"Successfully downloaded audio for {video_id}")
             return True, "audio_downloaded"
     except Exception as e:
         logging.error(f"Failed to download audio for {video_id}: {str(e)}")
         return False, f"audio_error: {str(e)}"
 
+def get_audio_duration(file_path: Path) -> float:
+    """Get the duration of an audio file in seconds using FFmpeg"""
+    try:
+        cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", 
+               "-of", "default=noprint_wrappers=1:nokey=1", str(file_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return float(result.stdout.strip())
+    except Exception as e:
+        logging.error(f"Error getting audio duration: {str(e)}")
+        return 0.0
+
+def split_audio_file(file_path: Path, segment_length_secs: int) -> List[Path]:
+    """Split an audio file into segments of specified length"""
+    try:
+        # Get total duration
+        duration = get_audio_duration(file_path)
+        
+        if duration <= 0:
+            logging.error("Cannot determine file duration")
+            return []
+        
+        # Calculate number of segments
+        num_segments = int(duration / segment_length_secs) + (1 if duration % segment_length_secs > 0 else 0)
+        output_files = []
+        
+        for i in range(num_segments):
+            start_time = i * segment_length_secs
+            output_file = file_path.with_name(f"{file_path.stem}_part{i+1}{file_path.suffix}")
+            
+            # Use FFmpeg to extract segment
+            cmd = [
+                "ffmpeg", "-y", "-i", str(file_path), 
+                "-ss", str(start_time), 
+                "-t", str(segment_length_secs),
+                "-acodec", "copy", 
+                str(output_file)
+            ]
+            
+            subprocess.run(cmd, check=True)
+            output_files.append(output_file)
+            logging.info(f"Created segment {i+1}/{num_segments}: {output_file}")
+        
+        # Remove the original large file
+        file_path.unlink()
+        logging.info(f"Removed original large file: {file_path}")
+        
+        return output_files
+    except Exception as e:
+        logging.error(f"Error splitting audio file: {str(e)}")
+        return []
+
+
+
+
+
+
+
+
+
+
+
+
 def process_audio_to_transcript(config: Dict[str, Any], paths: Dict[str, Path], success_data: Dict) -> None:
-    """Process downloaded audio files to generate transcripts using WhisperAI"""
+    """Process downloaded audio files to generate transcripts using WhisperAI with GPU acceleration"""
     # Check if we should process audio files
     if not config.get("PROCESS_SST_AUDIO", False):
         logging.info("Audio processing is disabled. Skipping audio-to-transcript conversion.")
@@ -545,12 +629,23 @@ def process_audio_to_transcript(config: Dict[str, Any], paths: Dict[str, Path], 
     
     # Import Whisper only when needed to avoid import errors when not used
     import whisper
+    import torch
     
-    logging.info("Loading Whisper model for audio processing...")
+    # Determine device to use (GPU or CPU)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cuda":
+        logging.info(f"Using GPU acceleration for Whisper: {torch.cuda.get_device_name()}")
+    else:
+        logging.warning("GPU acceleration not available for Whisper, using CPU")
+    
+    # Select model size
+    model_size = config.get("WHISPER_MODEL_SIZE", "base")
+    logging.info(f"Loading Whisper {model_size} model for audio processing...")
+    
     try:
-        # Load a smaller, faster model by default
-        model = whisper.load_model("base")
-        logging.info("Whisper model loaded successfully")
+        # Load model to the determined device
+        model = whisper.load_model(model_size, device=device)
+        logging.info(f"Whisper model loaded successfully on {device}")
     except Exception as e:
         logging.error(f"Failed to load Whisper model: {str(e)}")
         return
@@ -579,8 +674,18 @@ def process_audio_to_transcript(config: Dict[str, Any], paths: Dict[str, Path], 
         # Process audio file
         logging.info(f"Processing audio for {video_id}")
         try:
-            # Transcribe audio
-            result = model.transcribe(str(audio_file))
+            # Track processing time
+            start_time = time.time()
+            
+            # Transcribe audio with GPU if available
+            result = model.transcribe(
+                str(audio_file),
+                fp16=(device == "cuda"),  # Use half-precision for GPU
+                language="en"  # Set language to match your LANG_INCL_LS setting
+            )
+            
+            elapsed_time = time.time() - start_time
+            logging.info(f"Transcription took {elapsed_time:.2f} seconds")
             
             # Convert to our transcript format
             transcript_data = []
@@ -600,7 +705,7 @@ def process_audio_to_transcript(config: Dict[str, Any], paths: Dict[str, Path], 
             if "methods_tried" in success_data[video_id]:
                 success_data[video_id]["methods_tried"].append("whisper")
             
-            logging.info(f"Generated transcript for {video_id} using Whisper")
+            logging.info(f"Generated transcript for {video_id} using Whisper on {device}")
             
         except Exception as e:
             logging.error(f"Failed to process audio for {video_id}: {str(e)}")

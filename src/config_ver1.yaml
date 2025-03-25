@@ -27,3 +27,5 @@ MIN_WAIT_TIME: 0.5  # Minimum wait time in seconds
 
 # Logging Configuration
 LOGGING_LEVEL: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+

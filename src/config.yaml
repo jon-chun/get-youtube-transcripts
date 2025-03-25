@@ -23,3 +23,14 @@ MAX_PAGES_PER_CHANNEL: 5 # Maximum number of result pages to process per channel
 MAX_VIDEOS_PER_CHANNEL: 10 # Maximum number of videos to process per channel
 # Logging Configuration
 LOGGING_LEVEL: "INFO" # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# Audio Download Settings
+AUDIO_QUALITY: "64"  # MP3 quality in kbps (lower = smaller files)
+USE_GPU_ACCELERATION: true  # Use GPU acceleration for audio processing
+MAX_AUDIO_LENGTH_MINS: 30  # Maximum length in minutes for audio files
+SPLIT_LONG_AUDIO: true  # Whether to split long audio files into chunks
+AUDIO_CHUNK_MINS: 10  # Size of each chunk in minutes if splitting
+
+# Optional: Configure Whisper model size
+# Options: tiny, base, small, medium, large
+WHISPER_MODEL_SIZE: "base"  # Smaller models are faster but less accurate
