@@ -1,0 +1,201 @@
+#!/usr/bin/env python
+"""
+Utility to convert audio files to text transcripts using OpenAI's Whisper model with GPU acceleration.
+This script processes all MP3 files in the data/audio directory and creates corresponding transcripts
+in the data/transcripts directory.
+
+
+# Requirements:
+
+OpenAI Whisper (pip install openai-whisper)
+PyTorch with CUDA support (pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118)
+
+# Output:
+The script will:
+
+Find all MP3 files in ../data/audio/
+Process each file with Whisper
+Save the transcripts as text files in ../data/transcripts/
+Provide detailed logging of the process
+
+For best performance, make sure your GPU drivers are up to date and you have enough VRAM for your chosen model size.
+
+
+# Basic usage (uses "base" model and English language)
+python util_audio2text.py
+
+# Using a different model size
+python util_audio2text.py --model small
+
+# Force overwriting existing transcripts
+python util_audio2text.py --force
+
+# Specify a different language
+python util_audio2text.py --language fr
+
+# Force CPU usage even if GPU is available
+python util_audio2text.py --cpu
+
+
+"""
+
+import os
+import sys
+import time
+import glob
+import logging
+import argparse
+from pathlib import Path
+import torch
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+def setup_paths():
+    """Setup paths relative to the script location to ensure it works from any directory"""
+    # Get the directory of the script itself
+    script_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    
+    # Calculate paths relative to the parent directory
+    parent_dir = script_dir.parent
+    audio_dir = parent_dir / "data" / "audio"
+    transcript_dir = parent_dir / "data" / "transcripts"
+    
+    # Ensure transcript directory exists
+    os.makedirs(transcript_dir, exist_ok=True)
+    
+    return audio_dir, transcript_dir
+
+def get_device_info():
+    """Get information about the device and CUDA availability"""
+    if not torch.cuda.is_available():
+        logging.warning("CUDA is not available. Using CPU for transcription.")
+        return "cpu", None
+    
+    device = "cuda"
+    device_name = torch.cuda.get_device_name()
+    device_count = torch.cuda.device_count()
+    logging.info(f"Using GPU acceleration: {device_name}")
+    logging.info(f"Number of available GPUs: {device_count}")
+    
+    # Print memory info
+    memory_allocated = torch.cuda.memory_allocated() / (1024**2)
+    memory_reserved = torch.cuda.memory_reserved() / (1024**2)
+    logging.info(f"GPU memory allocated: {memory_allocated:.2f} MB")
+    logging.info(f"GPU memory reserved: {memory_reserved:.2f} MB")
+    
+    return device, device_name
+
+def load_whisper_model(model_size="base", device="cuda"):
+    """Load the Whisper model with specified size and device"""
+    try:
+        import whisper
+        logging.info(f"Loading Whisper {model_size} model on {device}...")
+        start_time = time.time()
+        model = whisper.load_model(model_size, device=device)
+        elapsed_time = time.time() - start_time
+        logging.info(f"Model loaded successfully in {elapsed_time:.2f} seconds")
+        return model
+    except ImportError:
+        logging.error("OpenAI Whisper not installed. Install with: pip install openai-whisper")
+        sys.exit(1)
+    except Exception as e:
+        logging.error(f"Error loading Whisper model: {str(e)}")
+        sys.exit(1)
+
+def process_audio_files(audio_dir, transcript_dir, model, device, args):
+    """Process all MP3 files and create text transcripts"""
+    # Find all MP3 files
+    audio_files = list(glob.glob(os.path.join(audio_dir, "*.mp3")))
+    total_files = len(audio_files)
+    
+    if total_files == 0:
+        logging.warning(f"No MP3 files found in {audio_dir}")
+        return
+    
+    logging.info(f"Found {total_files} MP3 files to process")
+    
+    # Process each file
+    for i, audio_file in enumerate(audio_files, 1):
+        file_path = Path(audio_file)
+        file_name = file_path.stem
+        transcript_path = transcript_dir / f"{file_name}.txt"
+        
+        # Skip if transcript exists and not forced to overwrite
+        if transcript_path.exists() and not args.force:
+            logging.info(f"[{i}/{total_files}] Skipping {file_name} (transcript already exists)")
+            continue
+        
+        try:
+            logging.info(f"[{i}/{total_files}] Processing {file_name}...")
+            start_time = time.time()
+            
+            # Transcribe the audio
+            result = model.transcribe(
+                str(file_path),
+                fp16=(device == "cuda"),  # Use half-precision for GPU
+                language=args.language
+            )
+            
+            # Get the full transcript
+            transcript = result["text"].strip()
+            
+            # Save the transcript to a text file
+            with open(transcript_path, 'w', encoding='utf-8') as f:
+                f.write(transcript)
+            
+            elapsed_time = time.time() - start_time
+            logging.info(f"[{i}/{total_files}] Completed {file_name} in {elapsed_time:.2f} seconds")
+            
+            # Print memory usage if using GPU
+            if device == "cuda":
+                memory_allocated = torch.cuda.memory_allocated() / (1024**2)
+                logging.debug(f"GPU memory allocated: {memory_allocated:.2f} MB")
+                
+                # Clear cache periodically
+                if i % 5 == 0:
+                    torch.cuda.empty_cache()
+                    logging.debug("Cleared CUDA cache")
+        
+        except Exception as e:
+            logging.error(f"Error processing {file_name}: {str(e)}")
+
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description="Convert audio files to text transcripts using Whisper")
+    parser.add_argument("--model", type=str, default="base", 
+                        choices=["tiny", "base", "small", "medium", "large"],
+                        help="Whisper model size (default: base)")
+    parser.add_argument("--force", action="store_true", 
+                        help="Force overwrite of existing transcripts")
+    parser.add_argument("--language", type=str, default="en",
+                        help="Language code for transcription (default: en)")
+    parser.add_argument("--cpu", action="store_true",
+                        help="Force CPU usage even if GPU is available")
+    return parser.parse_args()
+
+def main():
+    """Main entry point"""
+    args = parse_arguments()
+    
+    # Setup paths
+    audio_dir, transcript_dir = setup_paths()
+    logging.info(f"Audio directory: {audio_dir}")
+    logging.info(f"Transcript directory: {transcript_dir}")
+    
+    # Get device info (CPU or GPU)
+    device = "cpu" if args.cpu else get_device_info()[0]
+    
+    # Load Whisper model
+    model = load_whisper_model(args.model, device)
+    
+    # Process audio files
+    process_audio_files(audio_dir, transcript_dir, model, device, args)
+    
+    logging.info("Transcription completed")
+
+if __name__ == "__main__":
+    main()

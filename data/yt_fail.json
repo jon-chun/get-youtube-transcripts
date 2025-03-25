@@ -7,5 +7,23 @@
       "audio"
     ],
     "timestamp": "2025-03-25T08:21:07.441420"
+  },
+  "gRKp2kNfVpY": {
+    "title": "Saturday 7 AM Mass June 24, 2023",
+    "channel": "St. Patrick Church - Columbus, Ohio",
+    "method_result": "audio_downloaded_and_split",
+    "methods_tried": [
+      "audio"
+    ],
+    "timestamp": "2025-03-25T08:25:11.577121"
+  },
+  "ROTO57ciZ58": {
+    "title": "Daily 7 AM Mass from St. Patrick's Church, Columbus, OH June 19, 2023",
+    "channel": "St. Patrick Church - Columbus, Ohio",
+    "method_result": "audio_downloaded_and_split",
+    "methods_tried": [
+      "audio"
+    ],
+    "timestamp": "2025-03-25T08:30:13.261474"
   }
 }
