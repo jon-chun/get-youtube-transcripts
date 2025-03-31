@@ -1,0 +1,7 @@
+Extraction Report - 2025-03-31T16:46:25.238541
+Total channels processed: 2
+
+Channel @StPatrickChurchColumbusOhio: Total Videos Processed: 24, Accepted: 14, Rejected: 10
+Channel @CovenantPresbyterian: Total Videos Processed: 655, Accepted: 96, Rejected: 559
+
+Grand Totals - Processed: 679, Accepted: 110, Rejected: 569

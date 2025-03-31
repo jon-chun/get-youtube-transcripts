@@ -13,51 +13,6 @@ except ImportError:
 
 # --- Constants and defaults ---
 YT_CHANNEL_LS = ['@StPatrickChurchColumbusOhio/videos', '@CovenantPresbyterian/videos']
-
-YT_CHANNEL_LS = [
-    "@ColumbusCatholic",
-    "@st.francisassisi-columbuso3369",
-    "@StCatharineChurch/playlists",
-    "@st.nicholasorthodoxchurchm8410",
-    "@saintbarnabas-columbusohio/streams",
-    "@ColumbusCatholic/streams",
-    "@WorthingtonChristianChurch",
-    "@eastlandcc4888",
-    "@onedotchurch",
-    "@fbc.family/videos",
-    "@GardenCityChurchColumbus/videos",
-    "@villagechurch4072",
-    "@cccnewark5619/videos",
-    "@graceopccolumbus/videos",
-    "@providence-opc-pataskala/streams",
-    "@gracecentral4120/streams",
-    "@WCPCGahanna/videos",
-    "@jerseyreformedbaptistchurch/streams",
-    "@NewHopePowell/streams",
-    "@614Church/streams",
-    "@OasisCityChurch/streams",
-    "@RockCity_TV/featured",
-    "@PottersHouseColumbus/streams",
-    "@FaithStadiumTV",
-    "@rodparsley/streams",
-    "@LeaveAMarkChurch/streams",
-    "@TheChurchNextDoor/streams",
-    "@NCBConline/streams",
-    "@contrastchurch/videos",
-    "@ccchurch/streams",
-    "@RefineryOhio/videos",
-    "@northwestumc/streams",
-    "@st.paultheapostlecatholicc2045/streams",
-    "@StMaryCOC",
-    "@livingstonumc333/streams",
-    "@kingaveumc",
-    "@eastviewumc8670/streams",
-    "@TheNazChurch/videos",
-    "@OneHopeChurchoftheNazarene/streams",
-    "@reynoldsburgnazchurch",
-    "@WhitehallNaz/videos"
-]
-
 YT_CHANNEL_DEFAULT = '/videos'  # Default suffix if none is specified
 CHECKPOINT_VIDEO_CT = 5
 SLEEP_DELAY = 1.0  # seconds between video requests
@@ -106,24 +61,13 @@ def parse_channel_list(channels_csv):
     
     return channels
 
-def ensure_directory_exists(directory):
-    """
-    Ensure that a directory and all its parent directories exist.
-    
-    Args:
-        directory (str): The directory path to ensure exists.
-    """
-    os.makedirs(directory, exist_ok=True)
-    logging.debug(f"Ensured directory exists: {directory}")
-
 def get_output_directory():
     """
     Determine the output directory relative to the parent directory of the script.
-    Creates the directory if it doesn't exist.
     """
     base_dir = os.path.dirname(os.path.abspath(__file__))
     out_dir = os.path.join(base_dir, "..", "data", "videos_metadata")
-    ensure_directory_exists(out_dir)
+    os.makedirs(out_dir, exist_ok=True)
     return out_dir
 
 def load_checkpoint_data(out_dir):
@@ -154,10 +98,7 @@ def load_checkpoint_data(out_dir):
 def save_checkpoint_data(all_videos, accepted_videos, rejected_videos, report_text, out_dir):
     """
     Save checkpoint data to JSON files and a human-readable report.
-    Ensures the output directory exists before saving.
     """
-    ensure_directory_exists(out_dir)
-    
     def save_json(filename, data):
         path = os.path.join(out_dir, filename)
         try:
@@ -220,64 +161,39 @@ def meets_criteria(video):
         video (dict): Metadata for a single video.
         
     Returns:
-        tuple: (bool, str) - (True, None) if video meets all criteria, 
-                            (False, reason) with rejection reason otherwise.
+        bool: True if video meets all criteria, False otherwise.
     """
     # Duration check (in seconds)
     duration = video.get('duration')
-    if duration is None or duration < VIDEO_LEN_MIN:
-        reason = f"duration too short: {duration}s < {VIDEO_LEN_MIN}s"
-        logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
-        return False, reason
-    if duration > VIDEO_LEN_MAX:
-        reason = f"duration too long: {duration}s > {VIDEO_LEN_MAX}s"
-        logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
-        return False, reason
+    if duration is None or not (VIDEO_LEN_MIN <= duration <= VIDEO_LEN_MAX):
+        logging.debug(f"Video {video.get('id', 'unknown')} rejected: duration {duration}")
+        return False
 
     # Upload date check (YYYYMMDD; lexicographical compare works for valid date strings)
     upload_date = video.get('upload_date')
-    if upload_date is None or upload_date <= VIDEO_DATE_AFTER:
-        reason = f"upload date too early: {upload_date} <= {VIDEO_DATE_AFTER}"
-        logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
-        return False, reason
-    if upload_date >= VIDEO_DATE_BEFORE:
-        reason = f"upload date too late: {upload_date} >= {VIDEO_DATE_BEFORE}"
-        logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
-        return False, reason
+    if upload_date is None or not (VIDEO_DATE_AFTER < upload_date < VIDEO_DATE_BEFORE):
+        logging.debug(f"Video {video.get('id', 'unknown')} rejected: upload_date {upload_date}")
+        return False
 
     # Language check
     language = video.get('language')
     if language is None or language.lower() not in [l.lower() for l in VIDEO_LANG]:
-        reason = f"language not supported: {language}"
-        logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
-        return False, reason
+        logging.debug(f"Video {video.get('id', 'unknown')} rejected: language {language}")
+        return False
 
     # View count check
     view_count = video.get('view_count')
-    if view_count is None or view_count < VIDEO_VIEWS_MIN:
-        reason = f"too few views: {view_count} < {VIDEO_VIEWS_MIN}"
-        logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
-        return False, reason
-    if view_count > VIDEO_VIEWS_MAX:
-        reason = f"too many views: {view_count} > {VIDEO_VIEWS_MAX}"
-        logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
-        return False, reason
+    if view_count is None or not (VIDEO_VIEWS_MIN <= view_count <= VIDEO_VIEWS_MAX):
+        logging.debug(f"Video {video.get('id', 'unknown')} rejected: view_count {view_count}")
+        return False
 
     # Like count check
     like_count = video.get('like_count')
-    # Convert None to 0 if minimum upvotes is 0
-    if like_count is None or like_count is 'None':
-        like_count = 0
-    if like_count < VIDEO_UPVOTES_MIN:
-        reason = f"too few likes: {like_count} < {VIDEO_UPVOTES_MIN}"
-        logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
-        return False, reason
-    if like_count > VIDEO_UPVOTES_MAX:
-        reason = f"too many likes: {like_count} > {VIDEO_UPVOTES_MAX}"
-        logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
-        return False, reason
+    if like_count is None or not (VIDEO_UPVOTES_MIN <= like_count <= VIDEO_UPVOTES_MAX):
+        logging.debug(f"Video {video.get('id', 'unknown')} rejected: like_count {like_count}")
+        return False
 
-    return True, None
+    return True
 
 def get_video_metadata(video_id):
     """
@@ -300,19 +216,6 @@ def get_video_metadata(video_id):
         logging.error(f"Unexpected error extracting video {video_id}: {e}")
     return None
 
-def has_channel_been_scraped(channel_id, all_videos):
-    """
-    Determine if a channel has already been fully scraped.
-    
-    Args:
-        channel_id (str): The YouTube channel ID.
-        all_videos (dict): Dictionary containing all processed videos.
-        
-    Returns:
-        bool: True if the channel exists and has videos, False otherwise.
-    """
-    return channel_id in all_videos and len(all_videos[channel_id]) > 0
-
 # --- Main Extraction Function ---
 
 def get_yt_channel_videos(channels, out_dir):
@@ -323,9 +226,6 @@ def get_yt_channel_videos(channels, out_dir):
         channels (list): List of YouTube channel URLs or shorthand (with /videos appended).
         out_dir (str): Output directory for checkpoint files.
     """
-    # Ensure output directory exists
-    ensure_directory_exists(out_dir)
-    
     # Load existing checkpoint data if available.
     all_videos, accepted_videos, rejected_videos = load_checkpoint_data(out_dir)
 
@@ -349,11 +249,6 @@ def get_yt_channel_videos(channels, out_dir):
             # Channel ID is always after youtube.com/ but before any suffix
             channel_id = parts[3] if len(parts) > 3 else channel_url
             logging.info(f"Extracted channel ID: {channel_id}")
-            
-            # Check if the channel has already been scraped
-            if has_channel_been_scraped(channel_id, all_videos):
-                logging.info(f"Skipping channel {channel_id} as it has already been scraped.")
-                continue
             
             # Ensure we have a URL that will list videos
             if not any(suffix in channel_url for suffix in ['/videos', '/streams', '/playlists', '/featured']):
@@ -417,15 +312,12 @@ def get_yt_channel_videos(channels, out_dir):
                 all_videos[channel_id][video_id] = metadata
 
                 # Filter based on criteria.
-                meets, reason = meets_criteria(video_info)
-                if meets:
+                if meets_criteria(video_info):
                     accepted_videos[channel_id][video_id] = metadata
                     logging.info(f"Accepted video {video_id}")
                 else:
-                    # Add rejection reason to metadata
-                    metadata["reason"] = reason
                     rejected_videos[channel_id][video_id] = metadata
-                    logging.info(f"Rejected video {video_id}: {reason}")
+                    logging.info(f"Rejected video {video_id}")
 
                 processed_ct += 1
 

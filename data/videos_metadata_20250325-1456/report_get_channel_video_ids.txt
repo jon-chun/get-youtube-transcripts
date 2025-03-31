@@ -1,0 +1,6 @@
+Extraction Report - 2025-03-25T14:53:08.311491
+Total channels processed: 1
+
+Channel @StPatrickChurchColumbusOhio: Total Videos Processed: 10, Accepted: 0, Rejected: 10
+
+Grand Totals - Processed: 10, Accepted: 0, Rejected: 10
