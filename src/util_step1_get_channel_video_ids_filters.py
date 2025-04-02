@@ -4,6 +4,7 @@ import os
 import logging
 import argparse
 import time
+import yaml
 from datetime import datetime
 
 try:
@@ -11,82 +12,59 @@ try:
 except ImportError:
     tqdm = lambda x, **kwargs: x  # fallback if tqdm is not available
 
-# --- Constants and defaults ---
-YT_CHANNEL_LS = ['@StPatrickChurchColumbusOhio/videos', '@CovenantPresbyterian/videos']
-
-YT_CHANNEL_LS = [
-    "@ColumbusCatholic",
-    "@st.francisassisi-columbuso3369",
-    "@StCatharineChurch/playlists",
-    "@st.nicholasorthodoxchurchm8410",
-    "@saintbarnabas-columbusohio/streams",
-    "@ColumbusCatholic/streams",
-    "@WorthingtonChristianChurch",
-    "@eastlandcc4888",
-    "@onedotchurch",
-    "@fbc.family/videos",
-    "@GardenCityChurchColumbus/videos",
-    "@villagechurch4072",
-    "@cccnewark5619/videos",
-    "@graceopccolumbus/videos",
-    "@providence-opc-pataskala/streams",
-    "@gracecentral4120/streams",
-    "@WCPCGahanna/videos",
-    "@jerseyreformedbaptistchurch/streams",
-    "@NewHopePowell/streams",
-    "@614Church/streams",
-    "@OasisCityChurch/streams",
-    "@RockCity_TV/featured",
-    "@PottersHouseColumbus/streams",
-    "@FaithStadiumTV",
-    "@rodparsley/streams",
-    "@LeaveAMarkChurch/streams",
-    "@TheChurchNextDoor/streams",
-    "@NCBConline/streams",
-    "@contrastchurch/videos",
-    "@ccchurch/streams",
-    "@RefineryOhio/videos",
-    "@northwestumc/streams",
-    "@st.paultheapostlecatholicc2045/streams",
-    "@StMaryCOC",
-    "@livingstonumc333/streams",
-    "@kingaveumc",
-    "@eastviewumc8670/streams",
-    "@TheNazChurch/videos",
-    "@OneHopeChurchoftheNazarene/streams",
-    "@reynoldsburgnazchurch",
-    "@WhitehallNaz/videos"
-]
-
-YT_CHANNEL_DEFAULT = '/videos'  # Default suffix if none is specified
-CHECKPOINT_VIDEO_CT = 5
-SLEEP_DELAY = 1.0  # seconds between video requests
-
-# Filtering criteria (constants)
-VIDEO_LEN_MIN = 5 * 60         # 5 minutes in seconds
-VIDEO_LEN_MAX = 120 * 60       # 120 minutes in seconds
-VIDEO_DATE_AFTER = "20000101"  # Videos must be published after this date (YYYYMMDD)
-VIDEO_DATE_BEFORE = "20250401" # Videos must be published before this date (YYYYMMDD)
-VIDEO_LANG = ['en']            # Allowed video language(s)
-VIDEO_VIEWS_MIN = 20           # Minimum view count
-VIDEO_VIEWS_MAX = 1000000      # Maximum view count
-VIDEO_UPVOTES_MIN = 0          # Minimum upvotes (like_count)
-VIDEO_UPVOTES_MAX = 1000000    # Maximum upvotes (like_count)
-
-# Filenames for checkpoints and report (output will be placed in the output directory)
-OUTPUT_ALL_JSON = "all_get_channel_video_ids.json"
-OUTPUT_ACCEPTED_JSON = "accepted_get_channel_video_ids.json"
-OUTPUT_REJECTED_JSON = "rejected_get_channel_video_ids.json"
-OUTPUT_REPORT = "report_get_channel_video_ids.txt"
+# --- Load Configuration ---
+def load_config(config_path="config.yaml"):
+    """
+    Load configuration from YAML file.
+    
+    Args:
+        config_path (str): Path to configuration YAML file.
+        
+    Returns:
+        dict: Configuration dictionary.
+    """
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        logging.info(f"Loaded configuration from {config_path}")
+        return config
+    except Exception as e:
+        logging.error(f"Error loading configuration from {config_path}: {e}")
+        logging.warning("Using default configuration")
+        # Return minimal default configuration
+        return {
+            "step1": {
+                "channels": ["@ColumbusCatholic/videos"],
+                "channel_default_suffix": "/videos",
+                "checkpoint_video_count": 5,
+                "sleep_delay": 1.0,
+                "video_length_min": 300,
+                "video_length_max": 7200,
+                "video_date_after": "20000101",
+                "video_date_before": "20250401",
+                "video_language": ["en"],
+                "video_views_min": 20,
+                "video_views_max": 1000000,
+                "video_upvotes_min": 0,
+                "video_upvotes_max": 1000000,
+                "output_files": {
+                    "all_json": "all_get_channel_video_ids.json",
+                    "accepted_json": "accepted_get_channel_video_ids.json",
+                    "rejected_json": "rejected_get_channel_video_ids.json",
+                    "report": "report_get_channel_video_ids.txt"
+                }
+            }
+        }
 
 # --- Helper Functions ---
 
-def parse_channel_list(channels_csv):
+def parse_channel_list(channels_csv, channel_default_suffix):
     """
     Parse a list of YouTube channels from CSV content.
     
     Args:
         channels_csv (str): String content of the CSV file with channels.
+        channel_default_suffix (str): Default suffix to append if none exists.
         
     Returns:
         list: List of properly formatted channel URLs.
@@ -100,7 +78,7 @@ def parse_channel_list(channels_csv):
         
         # Apply default suffix if none exists
         if not any(suffix in line for suffix in ['/videos', '/streams', '/playlists', '/featured']):
-            line = line + YT_CHANNEL_DEFAULT
+            line = line + channel_default_suffix
             
         channels.append(line)
     
@@ -126,10 +104,14 @@ def get_output_directory():
     ensure_directory_exists(out_dir)
     return out_dir
 
-def load_checkpoint_data(out_dir):
+def load_checkpoint_data(out_dir, output_files):
     """
     Load checkpoint data from output files if they exist.
     
+    Args:
+        out_dir (str): Directory containing checkpoint files.
+        output_files (dict): Dictionary with output filenames.
+        
     Returns:
         all_videos (dict): {channel_id: {video_id: metadata, ...}, ...}
         accepted_videos (dict): {channel_id: {video_id: metadata, ...}, ...}
@@ -145,16 +127,24 @@ def load_checkpoint_data(out_dir):
                 logging.error(f"Error loading {filename}: {e}")
         return {}
     
-    all_videos = load_json(OUTPUT_ALL_JSON)
-    accepted_videos = load_json(OUTPUT_ACCEPTED_JSON)
-    rejected_videos = load_json(OUTPUT_REJECTED_JSON)
+    all_videos = load_json(output_files["all_json"])
+    accepted_videos = load_json(output_files["accepted_json"])
+    rejected_videos = load_json(output_files["rejected_json"])
     
     return all_videos, accepted_videos, rejected_videos
 
-def save_checkpoint_data(all_videos, accepted_videos, rejected_videos, report_text, out_dir):
+def save_checkpoint_data(all_videos, accepted_videos, rejected_videos, report_text, out_dir, output_files):
     """
     Save checkpoint data to JSON files and a human-readable report.
     Ensures the output directory exists before saving.
+    
+    Args:
+        all_videos (dict): Dictionary of all processed videos.
+        accepted_videos (dict): Dictionary of accepted videos.
+        rejected_videos (dict): Dictionary of rejected videos.
+        report_text (str): Human-readable report text.
+        out_dir (str): Directory to save output files.
+        output_files (dict): Dictionary with output filenames.
     """
     ensure_directory_exists(out_dir)
     
@@ -167,21 +157,29 @@ def save_checkpoint_data(all_videos, accepted_videos, rejected_videos, report_te
         except Exception as e:
             logging.error(f"Error saving {filename}: {e}")
     
-    save_json(OUTPUT_ALL_JSON, all_videos)
-    save_json(OUTPUT_ACCEPTED_JSON, accepted_videos)
-    save_json(OUTPUT_REJECTED_JSON, rejected_videos)
+    save_json(output_files["all_json"], all_videos)
+    save_json(output_files["accepted_json"], accepted_videos)
+    save_json(output_files["rejected_json"], rejected_videos)
     
-    report_path = os.path.join(out_dir, OUTPUT_REPORT)
+    report_path = os.path.join(out_dir, output_files["report"])
     try:
         with open(report_path, 'w') as f:
             f.write(report_text)
-        logging.info(f"Saved report to {OUTPUT_REPORT}")
+        logging.info(f"Saved report to {output_files['report']}")
     except Exception as e:
         logging.error(f"Error saving report: {e}")
 
 def generate_report(all_videos, accepted_videos, rejected_videos):
     """
     Generate a human-readable report summarizing the extraction.
+    
+    Args:
+        all_videos (dict): Dictionary of all processed videos.
+        accepted_videos (dict): Dictionary of accepted videos.
+        rejected_videos (dict): Dictionary of rejected videos.
+        
+    Returns:
+        str: Human-readable report text.
     """
     lines = []
     total_channels = len(all_videos)
@@ -204,6 +202,12 @@ def generate_report(all_videos, accepted_videos, rejected_videos):
 def get_video_data_from_info(video_info):
     """
     Extract a subset of metadata keys from video_info, using empty string as a filler for missing values.
+    
+    Args:
+        video_info (dict): Full video metadata.
+        
+    Returns:
+        dict: Simplified video metadata.
     """
     keys = ["id", "title", "upload_date", "duration", "view_count", "like_count", "language"]
     data = {}
@@ -212,68 +216,80 @@ def get_video_data_from_info(video_info):
         data[key] = value if value is not None else ""
     return data
 
-def meets_criteria(video):
+def meets_criteria(video, config):
     """
-    Check if the video's metadata meets all filtering criteria.
+    Check if the video's metadata meets all filtering criteria from configuration.
     
     Args:
         video (dict): Metadata for a single video.
+        config (dict): Configuration with filtering criteria.
         
     Returns:
         tuple: (bool, str) - (True, None) if video meets all criteria, 
                             (False, reason) with rejection reason otherwise.
     """
+    # Get filtering criteria from config
+    video_length_min = config["video_length_min"]
+    video_length_max = config["video_length_max"]
+    video_date_after = config["video_date_after"]
+    video_date_before = config["video_date_before"]
+    video_language = config["video_language"]
+    video_views_min = config["video_views_min"]
+    video_views_max = config["video_views_max"]
+    video_upvotes_min = config["video_upvotes_min"]
+    video_upvotes_max = config["video_upvotes_max"]
+    
     # Duration check (in seconds)
     duration = video.get('duration')
-    if duration is None or duration < VIDEO_LEN_MIN:
-        reason = f"duration too short: {duration}s < {VIDEO_LEN_MIN}s"
+    if duration is None or duration < video_length_min:
+        reason = f"duration too short: {duration}s < {video_length_min}s"
         logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
         return False, reason
-    if duration > VIDEO_LEN_MAX:
-        reason = f"duration too long: {duration}s > {VIDEO_LEN_MAX}s"
+    if duration > video_length_max:
+        reason = f"duration too long: {duration}s > {video_length_max}s"
         logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
         return False, reason
 
     # Upload date check (YYYYMMDD; lexicographical compare works for valid date strings)
     upload_date = video.get('upload_date')
-    if upload_date is None or upload_date <= VIDEO_DATE_AFTER:
-        reason = f"upload date too early: {upload_date} <= {VIDEO_DATE_AFTER}"
+    if upload_date is None or upload_date <= video_date_after:
+        reason = f"upload date too early: {upload_date} <= {video_date_after}"
         logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
         return False, reason
-    if upload_date >= VIDEO_DATE_BEFORE:
-        reason = f"upload date too late: {upload_date} >= {VIDEO_DATE_BEFORE}"
+    if upload_date >= video_date_before:
+        reason = f"upload date too late: {upload_date} >= {video_date_before}"
         logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
         return False, reason
 
     # Language check
     language = video.get('language')
-    if language is None or language.lower() not in [l.lower() for l in VIDEO_LANG]:
+    if language is None or language.lower() not in [l.lower() for l in video_language]:
         reason = f"language not supported: {language}"
         logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
         return False, reason
 
     # View count check
     view_count = video.get('view_count')
-    if view_count is None or view_count < VIDEO_VIEWS_MIN:
-        reason = f"too few views: {view_count} < {VIDEO_VIEWS_MIN}"
+    if view_count is None or view_count < video_views_min:
+        reason = f"too few views: {view_count} < {video_views_min}"
         logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
         return False, reason
-    if view_count > VIDEO_VIEWS_MAX:
-        reason = f"too many views: {view_count} > {VIDEO_VIEWS_MAX}"
+    if view_count > video_views_max:
+        reason = f"too many views: {view_count} > {video_views_max}"
         logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
         return False, reason
 
     # Like count check
     like_count = video.get('like_count')
     # Convert None to 0 if minimum upvotes is 0
-    if like_count is None or like_count is 'None':
+    if like_count is None or like_count == 'None':
         like_count = 0
-    if like_count < VIDEO_UPVOTES_MIN:
-        reason = f"too few likes: {like_count} < {VIDEO_UPVOTES_MIN}"
+    if like_count < video_upvotes_min:
+        reason = f"too few likes: {like_count} < {video_upvotes_min}"
         logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
         return False, reason
-    if like_count > VIDEO_UPVOTES_MAX:
-        reason = f"too many likes: {like_count} > {VIDEO_UPVOTES_MAX}"
+    if like_count > video_upvotes_max:
+        reason = f"too many likes: {like_count} > {video_upvotes_max}"
         logging.debug(f"Video {video.get('id', 'unknown')} rejected: {reason}")
         return False, reason
 
@@ -315,19 +331,27 @@ def has_channel_been_scraped(channel_id, all_videos):
 
 # --- Main Extraction Function ---
 
-def get_yt_channel_videos(channels, out_dir):
+def get_yt_channel_videos(channels, out_dir, config):
     """
     Fetch video IDs from channels, extract metadata, filter videos, and save checkpoints.
     
     Args:
-        channels (list): List of YouTube channel URLs or shorthand (with /videos appended).
+        channels (list): List of YouTube channel URLs or shorthand.
         out_dir (str): Output directory for checkpoint files.
+        config (dict): Configuration dictionary.
     """
+    # Extract config values
+    step1_config = config["step1"]
+    channel_default_suffix = step1_config["channel_default_suffix"]
+    checkpoint_video_count = step1_config["checkpoint_video_count"]
+    sleep_delay = step1_config["sleep_delay"]
+    output_files = step1_config["output_files"]
+    
     # Ensure output directory exists
     ensure_directory_exists(out_dir)
     
     # Load existing checkpoint data if available.
-    all_videos, accepted_videos, rejected_videos = load_checkpoint_data(out_dir)
+    all_videos, accepted_videos, rejected_videos = load_checkpoint_data(out_dir, output_files)
 
     # Process each channel.
     for original_channel in channels:
@@ -357,7 +381,7 @@ def get_yt_channel_videos(channels, out_dir):
             
             # Ensure we have a URL that will list videos
             if not any(suffix in channel_url for suffix in ['/videos', '/streams', '/playlists', '/featured']):
-                channel_url = channel_url + YT_CHANNEL_DEFAULT
+                channel_url = channel_url + channel_default_suffix
                 logging.debug(f"Added default suffix: {channel_url}")
 
             # Ensure channel entries exist in checkpoint dictionaries.
@@ -410,14 +434,14 @@ def get_yt_channel_videos(channels, out_dir):
                 logging.info(f"Video {video_id}: '{title}' with duration {duration}s")
 
                 # Pause to avoid overwhelming the server.
-                time.sleep(SLEEP_DELAY)
+                time.sleep(sleep_delay)
 
                 # Prepare metadata dictionary with fallback for missing values.
                 metadata = get_video_data_from_info(video_info)
                 all_videos[channel_id][video_id] = metadata
 
                 # Filter based on criteria.
-                meets, reason = meets_criteria(video_info)
+                meets, reason = meets_criteria(video_info, step1_config)
                 if meets:
                     accepted_videos[channel_id][video_id] = metadata
                     logging.info(f"Accepted video {video_id}")
@@ -429,15 +453,15 @@ def get_yt_channel_videos(channels, out_dir):
 
                 processed_ct += 1
 
-                # Save checkpoint every CHECKPOINT_VIDEO_CT videos.
-                if processed_ct % CHECKPOINT_VIDEO_CT == 0:
+                # Save checkpoint every checkpoint_video_count videos.
+                if processed_ct % checkpoint_video_count == 0:
                     report_text = generate_report(all_videos, accepted_videos, rejected_videos)
-                    save_checkpoint_data(all_videos, accepted_videos, rejected_videos, report_text, out_dir)
+                    save_checkpoint_data(all_videos, accepted_videos, rejected_videos, report_text, out_dir, output_files)
                     logging.info(f"Checkpoint saved after processing {processed_ct} videos in channel {channel_id}")
 
             # End of channel processing; save checkpoint.
             report_text = generate_report(all_videos, accepted_videos, rejected_videos)
-            save_checkpoint_data(all_videos, accepted_videos, rejected_videos, report_text, out_dir)
+            save_checkpoint_data(all_videos, accepted_videos, rejected_videos, report_text, out_dir, output_files)
             logging.info(f"Finished processing channel {channel_id}. Total videos processed: {len(all_videos[channel_id])}")
 
         except yt_dlp.utils.DownloadError as e:
@@ -447,7 +471,7 @@ def get_yt_channel_videos(channels, out_dir):
 
     # Final report generation.
     final_report = generate_report(all_videos, accepted_videos, rejected_videos)
-    save_checkpoint_data(all_videos, accepted_videos, rejected_videos, final_report, out_dir)
+    save_checkpoint_data(all_videos, accepted_videos, rejected_videos, final_report, out_dir, output_files)
     logging.info("Completed extraction and filtering for all channels.")
     print("\nFinal Report:")
     print(final_report)
@@ -455,7 +479,6 @@ def get_yt_channel_videos(channels, out_dir):
 # --- Main Function ---
 
 def main():
-    global SLEEP_DELAY  # Declare global at the top of the function.
     parser = argparse.ArgumentParser(
         description="Fetch YouTube channel video metadata, filter by criteria, and save restartable checkpoints."
     )
@@ -476,11 +499,19 @@ def main():
         help="Direct CSV content with YouTube channel URLs."
     )
     parser.add_argument(
-        "--sleep", type=float, default=SLEEP_DELAY,
+        "--sleep", type=float,
         help="Delay (in seconds) between video metadata requests to avoid server overload."
+    )
+    parser.add_argument(
+        "--config", type=str, default="config.yaml",
+        help="Path to configuration YAML file."
     )
     args = parser.parse_args()
 
+    # Load configuration
+    config = load_config(args.config)
+    step1_config = config["step1"]
+    
     # Configure logging.
     if args.log == "DEBUG":
         logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
@@ -489,15 +520,17 @@ def main():
     elif args.log == "NONE":
         logging.basicConfig(level=logging.CRITICAL, format='%(levelname)s: %(message)s')
 
-    # Update sleep delay if provided.
-    SLEEP_DELAY = args.sleep
+    # Update sleep delay if provided in command line arguments
+    if args.sleep:
+        step1_config["sleep_delay"] = args.sleep
+        logging.info(f"Updated sleep delay to {args.sleep} from command line argument")
 
     # Determine the channels to process
     channels = []
     
     # Option 1: Direct CSV content
     if args.channels_csv_content:
-        channels = parse_channel_list(args.channels_csv_content)
+        channels = parse_channel_list(args.channels_csv_content, step1_config["channel_default_suffix"])
         logging.info(f"Parsed {len(channels)} channels from direct CSV content")
     
     # Option 2: CSV file path
@@ -505,7 +538,7 @@ def main():
         try:
             with open(args.channels_csv, 'r') as f:
                 channels_csv = f.read()
-            channels = parse_channel_list(channels_csv)
+            channels = parse_channel_list(channels_csv, step1_config["channel_default_suffix"])
             logging.info(f"Loaded {len(channels)} channels from CSV file")
         except Exception as e:
             logging.error(f"Error loading channels from CSV file: {e}")
@@ -515,13 +548,13 @@ def main():
     elif args.channels:
         channels = args.channels
     
-    # Option 4: Default channel list
+    # Option 4: Default channel list from config
     else:
-        channels = YT_CHANNEL_LS
+        channels = step1_config["channels"]
     
     out_dir = get_output_directory()
     logging.info("Starting YouTube channel video metadata extraction and filtering.")
-    get_yt_channel_videos(channels, out_dir)
+    get_yt_channel_videos(channels, out_dir, config)
     logging.info("Program finished.")
 
 if __name__ == '__main__':

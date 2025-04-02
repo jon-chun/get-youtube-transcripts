@@ -1,4 +1,109 @@
 # YouTube Transcript Scraper Configuration
+
+# ====== STEP1: CHANNEL VIDEO METADATA EXTRACTION ======
+step1:
+  # YouTube channel list for extraction
+  channels:
+    - "@ColumbusCatholic"
+    - "@st.francisassisi-columbuso3369"
+    - "@StCatharineChurch/playlists"
+    - "@st.nicholasorthodoxchurchm8410"
+    - "@saintbarnabas-columbusohio/streams"
+    - "@ColumbusCatholic/streams"
+    - "@WorthingtonChristianChurch"
+    - "@eastlandcc4888"
+    - "@onedotchurch"
+    - "@fbc.family/videos"
+    - "@GardenCityChurchColumbus/videos"
+    - "@villagechurch4072"
+    - "@cccnewark5619/videos"
+    - "@graceopccolumbus/videos"
+    - "@providence-opc-pataskala/streams"
+    - "@gracecentral4120/streams"
+    - "@WCPCGahanna/videos"
+    - "@jerseyreformedbaptistchurch/streams"
+    - "@NewHopePowell/streams"
+    - "@614Church/streams"
+    - "@OasisCityChurch/streams"
+    - "@RockCity_TV/featured"
+    - "@PottersHouseColumbus/streams"
+    - "@FaithStadiumTV"
+    - "@rodparsley/streams"
+    - "@LeaveAMarkChurch/streams"
+    - "@TheChurchNextDoor/streams"
+    - "@NCBConline/streams"
+    - "@contrastchurch/videos"
+    - "@ccchurch/streams"
+    - "@RefineryOhio/videos"
+    - "@northwestumc/streams"
+    - "@st.paultheapostlecatholicc2045/streams"
+    - "@StMaryCOC"
+    - "@livingstonumc333/streams"
+    - "@kingaveumc"
+    - "@eastviewumc8670/streams"
+    - "@TheNazChurch/videos"
+    - "@OneHopeChurchoftheNazarene/streams"
+    - "@reynoldsburgnazchurch"
+    - "@WhitehallNaz/videos"
+  
+  # Default suffix for channels without one specified
+  channel_default_suffix: "/videos"
+  
+  # Processing parameters
+  checkpoint_video_count: 5
+  sleep_delay: 1.0  # seconds between video requests
+  
+  # Video filtering criteria
+  video_length_min: 300        # 5 minutes in seconds
+  video_length_max: 7200       # 120 minutes in seconds
+  video_date_after: "20000101" # Videos must be published after this date (YYYYMMDD)
+  video_date_before: "20250401" # Videos must be published before this date (YYYYMMDD)
+  video_language: ["en"]       # Allowed video language(s)
+  video_views_min: 20          # Minimum view count
+  video_views_max: 1000000     # Maximum view count
+  video_upvotes_min: 0         # Minimum upvotes (like_count)
+  video_upvotes_max: 1000000   # Maximum upvotes (like_count)
+  
+  # Output filenames
+  output_files:
+    all_json: "all_get_channel_video_ids.json"
+    accepted_json: "accepted_get_channel_video_ids.json"
+    rejected_json: "rejected_get_channel_video_ids.json"
+    report: "report_get_channel_video_ids.txt"
+# ====== STEP2: YOUTUBE AUDIO DOWNLOAD ======
+step2:
+  # Input metadata file information
+  metadata_json_dir: "data/videos_metadata_annalia_20250401"
+  metadata_json_file: "accepted_get_channel_video_ids.json"
+  
+  # Audio download approach
+  audio_format_option: ["ydl_opts", ["wav", "mp3"]]  # Options: "ydl_opts" or "alt_formats"
+  # If using "ydl_opts", these are the preferred formats to try directly
+  # If using "alt_formats", these are alternative formats to try if primary fails
+  
+  # Audio download criteria
+  audio_lang: ["en", "es"]  # Allowed languages
+  audio_kbps_min: 128  # Minimum audio quality
+  
+  # Rate limiting and retry settings
+  sleep_delay: 1.0  # Seconds between video requests
+  retry_delay: 5.0  # Seconds to wait before retrying a failed download
+  max_retries: 3    # Maximum retry attempts for failed downloads
+  
+  # Output directory and file naming
+  audio_output_dir: "data/audio"
+  channel_prefix: "channel_at_"  # Prefix for channel directories
+  audio_file_prefix: "audio_file_"  # Prefix for audio files
+  
+  # Reporting and metadata output
+  meta_audio_report_dir: "data/audio/audio_metadata"  # Directory for reports and metadata
+  output_files:
+    all_json: "all_audio_downloads.json"
+    success_json: "successful_audio_downloads.json"
+    failed_json: "failed_audio_downloads.json" 
+    report: "audio_download_report.txt"
+
+# ====== GENERAL CONFIGURATION ======
 # Input Files
 YT_CHANNEL_CSV: "yt_channels.csv"
 YT_VIDEO_CSV: "yt_videos.csv"
@@ -34,6 +139,3 @@ AUDIO_CHUNK_MINS: 10  # Size of each chunk in minutes if splitting
 # Optional: Configure Whisper model size
 # Options: tiny, base, small, medium, large
 WHISPER_MODEL_SIZE: "base"  # Smaller models are faster but less accurate
-
-# Add to constants section
-YT_CHANNEL_DEFAULT: "/videos"
