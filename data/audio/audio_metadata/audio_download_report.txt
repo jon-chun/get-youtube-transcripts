@@ -1,9 +1,16 @@
-Audio Download Report - 2025-04-02T10:24:28.601582
-Total channels processed: 1
+Audio Download Report - 2025-04-02T11:02:22.646283
+Total channels processed: 6
 
-Channel @ColumbusCatholic: Total Videos Processed: 40, Successful: 40, Failed: 0
+Channel @ColumbusCatholic: Total Videos Processed: 145, Successful: 145, Failed: 0
+Channel @st.francisassisi-columbuso3369: Total Videos Processed: 0, Successful: 0, Failed: 0
+Channel @StCatharineChurch: Total Videos Processed: 0, Successful: 0, Failed: 0
+Channel @st.nicholasorthodoxchurchm8410: Total Videos Processed: 17, Successful: 17, Failed: 0
+Channel @saintbarnabas-columbusohio: Total Videos Processed: 9, Successful: 9, Failed: 0
+Channel @WorthingtonChristianChurch: Total Videos Processed: 60, Successful: 60, Failed: 0
 
-Grand Totals - Processed: 40, Successfully Downloaded: 40, Failed/Skipped: 0
+Grand Totals - Processed: 231, Successfully Downloaded: 231, Failed/Skipped: 0
 
 Downloaded Audio Formats:
-  webm: 40 files
+  webm: 148 files
+  m4a: 2 files
+  wav: 81 files
